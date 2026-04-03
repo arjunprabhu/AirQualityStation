@@ -4,7 +4,7 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 
 ![ESPHome](https://img.shields.io/badge/ESPHome-2024.x-blue?logo=esphome)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-Integration-41BDF5?logo=homeassistant)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)
 ![ESP32-S3](https://img.shields.io/badge/MCU-ESP32--S3-red)
 
 ---
@@ -341,7 +341,7 @@ air-quality-station/
 
 ## 📝 License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is available under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](LICENSE). You may not use the material for commercial purposes without explicit permission from the author.
 
 ---
 
