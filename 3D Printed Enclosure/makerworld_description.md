@@ -1,6 +1,6 @@
 # 🌬️ Smart Air Quality Station & Dashboard Enclosure
 
-Welcome to the official 3D printable enclosure for the **Air Quality Station**! This is a sleek, desktop-friendly housing designed to neatly organize a powerful environmental monitor. It precisely holds an ILI9341 touchscreen, a Seeed XIAO ESP32-S3 microcontroller, and an array of professional-grade air sensors.
+This is a sleek, desktop-friendly housing designed to neatly organize a powerful **Air Quality Station** environmental monitor. It precisely holds a cheap, easily available, and accessible 2.8" ILI9341 touchscreen, a Seeed XIAO ESP32-S3 microcontroller, and an array of professional-grade air sensors.
 
 Whether you want an independent desk monitor or a gorgeous smart home dashboard for Home Assistant, this enclosure gives your DIY electronics a premium, finished look.
 
