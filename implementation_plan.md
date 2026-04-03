@@ -5,6 +5,10 @@
 **17×10 Gikfun Solderable Mini Breadboard.** Columns A-E connected (left), F-J connected (right).
 Rows 1-2 and 16-17 reserved for mounting (empty). Usable rows: **3-15**.
 
+<p align="center">
+  <img src="images/GikfunPerfboard.jpg" width="40%" alt="Gikfun Perfboard Reference">
+</p>
+
 **Design principle:** Stagger left/right usage so that adjacent rows on the *same side* are rarely both occupied. Power and I2C zones have **perfect** buffers.
 
 | Row | Left (A-E) | Right (F-J) |
@@ -24,27 +28,6 @@ Rows 1-2 and 16-17 reserved for mounting (empty). Usable rows: **3-15**.
 | **14** | **Touch CS (GPIO1)** | **3.3V Rail 2** ↔ bridge E5 |
 | **15** | **UART TX (GPIO43)** | **UART RX (GPIO44)** |
 | 16-17 | *(mounting)* | *(mounting)* |
-
-### Buffer Analysis
-| Side | Transition | Buffer? |
-|:----:|:-----------|:-------:|
-| Left | 3→5 | ✅ Row 4 empty |
-| Left | 5→7 | ✅ Row 6 empty |
-| Left | 7→9 | ✅ Row 8 empty |
-| Left | 9→11 | ✅ Row 10 empty |
-| Left | 11→13 | ✅ Row 12 empty |
-| Left | 13→14 | ⚠️ Adjacent (Touch CS) |
-| Left | 14→15 | ⚠️ Adjacent (UART TX) |
-| Right | 4→6 | ✅ Row 5 empty |
-| Right | 6→8 | ✅ Row 7 empty |
-| Right | 8→9 | ⚠️ Adjacent (SPI MOSI) |
-| Right | 9→11 | ✅ Row 10 empty |
-| Right | 11→13 | ✅ Row 12 empty |
-| Right | 13→14 | ⚠️ Adjacent (3.3V Rail 2) |
-| Right | 14→15 | ⚠️ Adjacent (UART RX) |
-
-> [!TIP]
-> Power rails (rows 3-6) and I2C bus (rows 7-8) have **perfect** buffers on both sides. Only the bottom 3 rows (13-15) have adjacencies, and those carry few wires each (2 per rail).
 
 ### Required Solder Bridges
 1. **J4 → F6** — extends GND across two right-side rows
@@ -116,49 +99,6 @@ Rows 1-2 and 16-17 reserved for mounting (empty). Usable rows: **3-15**.
 
 ---
 
-## 3. Visual Wiring Diagram
-
-```mermaid
-graph TD
-    XIAO[XIAO ESP32S3]
-    PB[Protoboard Hub]
-    DISP[ILI9341 + Touch]
-    SPS[SPS30]
-    SGP[SGP41]
-    LD[LD2412 mmWave]
-    VEML[VEML7700]
-    SHT[SHT41]
-
-    XIAO -- "5V → A3" --> PB
-    PB -- "5V B3" --> SPS
-    PB -- "5V C3" --> LD
-
-    XIAO -- "3.3V → A5" --> PB
-    PB -- "3.3V B5 (VCC) / C5 (RST)" --> DISP
-    PB -- "3.3V D5" --> SGP
-    PB -- "3.3V E5" --> VEML
-    PB -- "3.3V G14 (Rail 2)" --> SHT
-
-    XIAO -- "GND → F4" --> PB
-    PB -- "GND G4" --> DISP
-    PB -- "GND H4" --> SPS
-    PB -- "GND I4" --> SGP
-    PB -- "GND G6 (Rail 2)" --> VEML
-    PB -- "GND H6" --> SHT
-    PB -- "GND I6" --> LD
-
-    XIAO -- "SDA A7 / SCL F8" --> PB
-    PB -- "I2C" --> SPS & SGP & VEML & SHT
-
-    XIAO -- "SPI A9/F9/A11" --> PB
-    PB -- "SPI + CS/DC/LED" --> DISP
-
-    XIAO -- "UART A15/F15" --> PB
-    PB -- "UART" --> LD
-```
-
----
-
 ## 4. Pin Cross-Reference (YAML ↔ Wiring)
 
 Verification of `aqistation.yaml` pin assignments against protoboard wiring:
@@ -197,18 +137,3 @@ i2c:
   frequency: 100kHz
 ```
 
----
-
-## 5. Status
-
-All wiring and configuration items are **complete and verified**:
-
-- [x] Protoboard allocation with buffer rows
-- [x] All sensor wiring (SPS30, SGP41, VEML7700, SHT41, LD2412)
-- [x] Display + touch wiring (ILI9341 + XPT2046)
-- [x] Backlight GPIO control (GPIO4)
-- [x] SGP41 compensation configured with SHT41 temp/humidity
-- [x] UART for LD2412 radar (GPIO43 TX, GPIO44 RX, 115200 baud)
-- [x] Presence-based backlight on/off
-- [x] Scheduled LD2412 restart at 3:00 AM daily
-- [x] All pin assignments verified against running YAML
