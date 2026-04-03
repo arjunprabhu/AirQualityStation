@@ -13,11 +13,11 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 
 | Page 1 — Air Quality | Page 2 — Particulates | Page 3 — Home & Weather |
 |:---:|:---:|:---:|
-| ![Air Quality](images/page1_air_quality.png) | ![Particulates](images/page2_particulates.png) | ![Home & Weather](images/page3_home_weather.png) |
+| ![Air Quality](images/page01.jpg) | ![Particulates](images/page02.jpg) | ![Home & Weather](images/page03.jpg) |
 
 | Page 4 — Local Sensors |
 |:---:|
-| Temperature, Humidity, Ambient Light, Radar Distance |
+| ![Local Sensors](images/page04.jpg) |
 
 ---
 
