@@ -11,13 +11,9 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 
 ## 📸 Screenshots
 
-| Page 1 — Air Quality | Page 2 — Particulates | Page 3 — Home & Weather |
-|:---:|:---:|:---:|
-| ![Air Quality](images/page01.jpg) | ![Particulates](images/page02.jpg) | ![Home & Weather](images/page03.jpg) |
-
-| Page 4 — Local Sensors |
-|:---:|
-| ![Local Sensors](images/page04.jpg) |
+| Page 1 — Air Quality | Page 2 — Particulates | Page 3 — Home & Weather | Page 4 — Local Sensors |
+|:---:|:---:|:---:|:---:|
+| ![Air Quality](images/page01.jpg) | ![Particulates](images/page02.jpg) | ![Home & Weather](images/page03.jpg) | ![Local Sensors](images/page04.jpg) |
 
 ---
 
