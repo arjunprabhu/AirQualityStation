@@ -7,8 +7,6 @@ This is a sleek, desktop-friendly housing designed to neatly organize a powerful
 
 ## 📐 Enclosure Design & Features
 
-I designed this housing from scratch to seamlessly combine aesthetics and engineering needs:
-
 *   **Precision Fit:** Tailored exactly for the standard 2.8" ILI9341 LCD Touchscreen module, hiding the ugly PCBs while highlighting the display.
 *   **Optimal Airflow:** Features strategically placed ventilation ports ensuring the internal Sensirion sensors get fresh room air without stagnation (vital for accurate PM2.5, VOC, and temperature readings).
 *   **Radar Window:** Includes a specialized cutout/thin-wall region tailored for the HLK-LD2412 24GHz mmWave radar module to allow flawless presence detection.
