@@ -309,6 +309,7 @@ AQI is calculated using the **US EPA breakpoint table** from PM2.5 concentration
 
 ```
 air-quality-station/
+├── 3d printed enclosure/    # 3D models and enclosure files
 ├── aqistation.yaml          # Main ESPHome configuration
 ├── README.md                # This file
 ├── implementation_plan.md   # Protoboard wiring plan
