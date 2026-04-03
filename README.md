@@ -51,7 +51,7 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 ### 3D Printed Enclosure
 
 The project features a sleek, desktop-friendly housing designed to fit perfectly. 
-👉 **[View the 3D Models and Source Files](3D Printed Enclosure/README.md)**
+👉 **[View the 3D Models and Source Files](3D%20Printed%20Enclosure/README.md)**
 
 ### Bill of Materials
 
