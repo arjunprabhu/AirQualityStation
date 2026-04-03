@@ -1,0 +1,1720 @@
+substitutions:
+  devicename: aqi-station
+  friendly_name: Air Quality Station
+  refresh_interval: "05"
+  auto_scroll_start_delay: "30"
+  auto_scroll_interval: "15"
+
+esphome:
+  name: ${devicename}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    build_flags: "-DBOARD_HAS_PSRAM"
+    board_build.esp-idf.memory_type: qio_opi
+    board_build.flash_mode: dio
+  on_boot:
+    - priority: -10
+      then:
+        - wait_until:
+            api.connected:
+        - delay: 3s
+        - script.execute: refresh_all_widgets
+        - if:
+            condition:
+              binary_sensor.is_on: radar_presence
+            then:
+              - script.execute: auto_scroll_loop
+        - delay: 120s
+        - if:
+            condition:
+              not:
+                binary_sensor.is_on: radar_presence
+            then:
+              - light.turn_off: display_backlight
+
+esp32:
+  board: seeed_xiao_esp32s3
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "y"
+      CONFIG_SPIRAM_RODATA: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: DEBUG
+
+api:
+  encryption:
+    key: "<to do : update as required>"
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: "<to do : update as required>"
+
+
+#udpate wifi ssid and password as required  
+
+wifi:
+  fast_connect: true
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${devicename} HS"
+    password: !secret fallback_password
+
+captive_portal:
+
+# Time source for scheduled radar restart
+time:
+  - platform: sntp
+    id: my_time
+    timezone: "America/Chicago"
+    servers:
+      - "pool.ntp.org"
+      - "time.google.com"
+      - "time.cloudflare.com"
+    on_time:
+      - cron: "0 0 3 * * *"  # Every day at 3:00 AM
+        then:
+          - button.press: ld2412_restart_btn
+
+# I2C for SPS30 and SGP4x
+i2c:
+  sda: GPIO5
+  scl: GPIO6
+  scan: true
+  frequency: 100kHz
+
+# SPI for Display and Touch
+spi:
+  clk_pin: GPIO7
+  mosi_pin: GPIO9
+  miso_pin: GPIO8        # Required for XPT2046 touch reads
+
+# Touchscreen
+touchscreen:
+  platform: xpt2046
+  id: my_touch
+  cs_pin: GPIO1
+  update_interval: 50ms
+  transform:
+    swap_xy: true
+  calibration:
+    x_min: 350
+    x_max: 3850
+    y_min: 300
+    y_max: 3800
+
+# Display -- LVGL mode (no lambda rendering)
+display:
+  - platform: ili9xxx
+    model: ili9341
+    id: my_display
+    cs_pin: GPIO2
+    dc_pin: GPIO3
+    data_rate: 40MHz
+    color_order: bgr
+    invert_colors: false
+    rotation: 90
+    update_interval: never
+    auto_clear_enabled: false
+
+# MDI Icons (binary format for recoloring)
+image:
+  binary:
+    # UI Icons
+    - file: mdi:air-filter
+      id: icon_air
+      resize: 20x20
+    - file: mdi:molecule
+      id: icon_voc
+      resize: 18x18
+    - file: mdi:smog
+      id: icon_nox
+      resize: 18x18
+    - file: mdi:blur
+      id: icon_particle
+      resize: 20x20
+    - file: mdi:water-percent
+      id: icon_humid
+      resize: 24x24
+    - file: mdi:brightness-6
+      id: icon_lux
+      resize: 24x24
+    - file: mdi:radar
+      id: icon_radar
+      resize: 24x24
+    - file: mdi:wifi
+      id: icon_wifi
+      resize: 16x16
+    - file: mdi:home-thermometer
+      id: icon_indoor
+      resize: 24x24
+    - file: mdi:thermometer
+      id: icon_outdoor
+      resize: 24x24
+    # Weather Icons
+    - file: mdi:weather-sunny
+      id: icon_w_sunny
+      resize: 28x28
+    - file: mdi:weather-night
+      id: icon_w_night
+      resize: 28x28
+    - file: mdi:weather-cloudy
+      id: icon_w_cloudy
+      resize: 28x28
+    - file: mdi:weather-partly-cloudy
+      id: icon_w_partly_cloudy
+      resize: 28x28
+    - file: mdi:weather-rainy
+      id: icon_w_rainy
+      resize: 28x28
+    - file: mdi:weather-pouring
+      id: icon_w_pouring
+      resize: 28x28
+    - file: mdi:weather-snowy
+      id: icon_w_snowy
+      resize: 28x28
+    - file: mdi:weather-snowy-rainy
+      id: icon_w_snowy_rainy
+      resize: 28x28
+    - file: mdi:weather-fog
+      id: icon_w_fog
+      resize: 28x28
+    - file: mdi:weather-windy
+      id: icon_w_windy
+      resize: 28x28
+    - file: mdi:weather-lightning
+      id: icon_w_lightning
+      resize: 28x28
+    - file: mdi:weather-lightning-rainy
+      id: icon_w_lightning_rainy
+      resize: 28x28
+    - file: mdi:weather-hail
+      id: icon_w_hail
+      resize: 28x28
+    - file: mdi:alert-circle-outline
+      id: icon_w_exceptional
+      resize: 28x28
+
+# Globals
+globals:
+  - id: current_aqi
+    type: int
+    initial_value: "0"
+  - id: touch_start_x
+    type: int
+    initial_value: "0"
+  - id: touch_start_y
+    type: int
+    initial_value: "0"
+
+# UART for mmWave Radar
+uart:
+  - id: uart_ld2412
+    tx_pin: GPIO43
+    rx_pin: GPIO44
+    baud_rate: 115200
+    parity: NONE
+    stop_bits: 1
+
+
+# mmWave Radar
+ld2412:
+  uart_id: uart_ld2412
+
+binary_sensor:
+  - platform: ld2412
+    has_target:
+      name: "Human Presence"
+      id: radar_presence
+      filters:
+        - delayed_off: 2min
+      on_press:
+        then:
+          - light.turn_on: display_backlight
+          - script.execute: auto_scroll_loop
+      on_release:
+        then:
+          - light.turn_off: display_backlight
+          - script.stop: auto_scroll_loop
+    has_moving_target:
+      name: Moving Target
+    has_still_target:
+      name: Still Target
+    dynamic_background_correction_status:
+      name: Dynamic Background Correction Status
+      
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: backlight_gpio
+
+light:
+  - platform: binary
+    name: "Display Backlight"
+    id: display_backlight
+    output: backlight_gpio
+    restore_mode: ALWAYS_ON
+
+# =============================================================================
+# LVGL Configuration
+# =============================================================================
+lvgl:
+  color_depth: 16
+  bg_color: 0x000000
+  border_width: 0
+  outline_width: 0
+  shadow_width: 0
+  text_font: MONTSERRAT_14
+  align: center
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  page_wrap: true
+
+  # Invisible full-screen overlay for swipe detection
+  # (ESPHome on_touch doesn't fire when LVGL owns the touchscreen;
+  #  LVGL widget events DO fire, so we use on_press/on_release here)
+  top_layer:
+    widgets:
+      # Swipe detection overlay (full-screen, transparent)
+      - obj:
+          width: 320
+          height: 240
+          align: CENTER
+          bg_opa: TRANSP
+          border_width: 0
+          scrollable: false
+          on_press:
+            - lambda: |-
+                lv_point_t p;
+                lv_indev_get_point(lv_indev_get_act(), &p);
+                id(touch_start_x) = p.x;
+                id(touch_start_y) = p.y;
+            - script.execute: auto_scroll_loop
+          on_release:
+            - lambda: |-
+                lv_point_t p;
+                lv_indev_get_point(lv_indev_get_act(), &p);
+                int dx = p.x - id(touch_start_x);
+                int dy = p.y - id(touch_start_y);
+                int swipe = (abs(dx) >= abs(dy)) ? dx : -dy;
+                if (swipe < -30) {
+                  id(page_next_script).execute();
+                } else if (swipe > 30) {
+                  id(page_prev_script).execute();
+                }
+      # --- Status bar (top-right, visible on all pages) ---
+      # AQI status
+      - label:
+          id: status_aqi_value
+          text: "AQI: --"
+          text_font: MONTSERRAT_12
+          text_color: 0x808080
+          bg_opa: TRANSP
+          align: TOP_RIGHT
+          x: -80
+          y: 6
+      # Indoor temperature
+      - label:
+          id: status_indoor_temp
+          text: "--"
+          text_font: MONTSERRAT_12
+          text_color: 0x808080
+          bg_opa: TRANSP
+          align: TOP_RIGHT
+          x: -30
+          y: 6
+      # WiFi signal icon
+      - image:
+          id: status_wifi_icon
+          src: icon_wifi
+          align: TOP_RIGHT
+          x: -4
+          y: 5
+          image_recolor: 0x00E000
+          image_recolor_opa: 100%
+
+  style_definitions:
+    - id: style_card
+      bg_color: 0x1A1A1A
+      bg_opa: COVER
+      border_width: 1
+      border_color: 0x333333
+      radius: 8
+      pad_all: 6
+      scrollbar_mode: "off"
+
+    - id: style_page
+      width: 320
+      height: 240
+      bg_color: 0x000000
+      bg_opa: COVER
+      border_width: 0
+      pad_all: 0
+      scrollbar_mode: "off"
+
+  # ---------- PAGES ----------
+  pages:
+    # ===================== PAGE 1: AIR QUALITY =====================
+    - id: page_air_quality
+      widgets:
+        - obj:
+            styles: style_page
+            scrollable: false
+            widgets:
+              # Header icon
+              - image:
+                  src: icon_air
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  image_recolor: 0x3498DB
+                  image_recolor_opa: 100%
+              # Header text
+              - label:
+                  text: "AIR QUALITY"
+                  text_font: MONTSERRAT_14
+                  text_color: 0xB0B0B0
+                  bg_opa: TRANSP
+                  align: TOP_LEFT
+                  x: 32
+                  y: 5
+              # Separator line
+              - obj:
+                  align: TOP_LEFT
+                  x: 0
+                  y: 26
+                  width: 320
+                  height: 1
+                  bg_color: 0x333333
+                  bg_opa: COVER
+                  border_width: 0
+
+              # --- AQI Card (Left Half) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 4
+                  y: 30
+                  width: 170
+                  height: 170
+                  widgets:
+                    - label:
+                        text: "AQI"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_MID
+                        y: 0
+                    # AQI colored badge (circle)
+                    - obj:
+                        id: aqi_badge_bg
+                        align: CENTER
+                        y: -4
+                        width: 68
+                        height: 68
+                        radius: 34
+                        bg_color: 0x404040
+                        bg_opa: COVER
+                        border_width: 0
+                        scrollbar_mode: "off"
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: aqi_value_label
+                              text: "--"
+                              text_font: MONTSERRAT_28
+                              text_color: 0xFFFFFF
+                              bg_opa: TRANSP
+                              align: CENTER
+                    # Quality text
+                    - label:
+                        id: aqi_quality_label
+                        text: ""
+                        text_font: MONTSERRAT_14
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: BOTTOM_MID
+                        y: -16
+                    # PM2.5 reference value
+                    - label:
+                        id: pm25_ref_label
+                        text: "PM2.5: --"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x666666
+                        bg_opa: TRANSP
+                        align: BOTTOM_MID
+                        y: -2
+
+              # --- VOC Card (Right Top) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 180
+                  y: 30
+                  width: 136
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_voc
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0x3498DB
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "VOC"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 24
+                        y: 3
+                    - label:
+                        id: voc_value_label
+                        text: "--"
+                        text_font: MONTSERRAT_20
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: TOP_RIGHT
+                        x: -4
+                        y: 0
+                    - bar:
+                        id: voc_bar
+                        align: BOTTOM_MID
+                        y: -4
+                        width: 120
+                        height: 8
+                        min_value: 0
+                        max_value: 500
+                        value: 0
+                        bg_color: 0x333333
+                        border_width: 0
+                        radius: 4
+                        indicator:
+                          bg_color: 0x3498DB
+                          radius: 4
+
+              # --- NOx Card (Right Bottom) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 180
+                  y: 118
+                  width: 136
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_nox
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0xFF6600
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "NOx"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 24
+                        y: 3
+                    - label:
+                        id: nox_value_label
+                        text: "--"
+                        text_font: MONTSERRAT_20
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: TOP_RIGHT
+                        x: -4
+                        y: 0
+                    - bar:
+                        id: nox_bar
+                        align: BOTTOM_MID
+                        y: -4
+                        width: 120
+                        height: 8
+                        min_value: 0
+                        max_value: 500
+                        value: 0
+                        bg_color: 0x333333
+                        border_width: 0
+                        radius: 4
+                        indicator:
+                          bg_color: 0xFF6600
+                          radius: 4
+
+              # Page dots (dot 1 active)
+              - obj:
+                  align: TOP_LEFT
+                  x: 131
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 147
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 163
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 179
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+
+    # ===================== PAGE 2: PARTICULATES =====================
+    - id: page_particulates
+      widgets:
+        - obj:
+            styles: style_page
+            scrollable: false
+            widgets:
+              # Header
+              - image:
+                  src: icon_particle
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  image_recolor: 0x3498DB
+                  image_recolor_opa: 100%
+              - label:
+                  text: "PARTICULATES"
+                  text_font: MONTSERRAT_14
+                  text_color: 0xB0B0B0
+                  bg_opa: TRANSP
+                  align: TOP_LEFT
+                  x: 32
+                  y: 5
+              - obj:
+                  align: TOP_LEFT
+                  x: 0
+                  y: 26
+                  width: 320
+                  height: 1
+                  bg_color: 0x333333
+                  bg_opa: COVER
+                  border_width: 0
+
+              # --- PM Bars (full-width fill bars with text overlay) ---
+              - obj:
+                  align: TOP_MID
+                  y: 32
+                  width: 310
+                  height: 180
+                  bg_opa: TRANSP
+                  border_width: 0
+                  scrollbar_mode: "off"
+                  scrollable: false
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN
+                    flex_align_main: SPACE_EVENLY
+                    flex_align_cross: STRETCH
+                    pad_row: 6
+                  widgets:
+                    # PM 1.0 row
+                    - obj:
+                        width: 310
+                        height: 36
+                        bg_color: 0x1A1A1A
+                        bg_opa: COVER
+                        border_width: 1
+                        border_color: 0x333333
+                        radius: 6
+                        scrollbar_mode: "off"
+                        scrollable: false
+                        widgets:
+                          - bar:
+                              id: pm1_bar
+                              width: 306
+                              height: 32
+                              align: CENTER
+                              min_value: 0
+                              max_value: 50
+                              value: 0
+                              bg_opa: TRANSP
+                              border_width: 0
+                              radius: 5
+                              indicator:
+                                bg_color: 0x2E7D32
+                                bg_opa: 70%
+                                radius: 5
+                          - label:
+                              text: "PM 1.0"
+                              text_font: MONTSERRAT_12
+                              text_color: 0xB0B0B0
+                              bg_opa: TRANSP
+                              align: LEFT_MID
+                              x: 10
+                          - label:
+                              id: pm1_value_label
+                              text: "-- ug/m3"
+                              text_font: MONTSERRAT_14
+                              text_color: 0xFFFFFF
+                              bg_opa: TRANSP
+                              align: CENTER
+                              x: 0
+                    # PM 2.5 row
+                    - obj:
+                        width: 310
+                        height: 36
+                        bg_color: 0x1A1A1A
+                        bg_opa: COVER
+                        border_width: 1
+                        border_color: 0x333333
+                        radius: 6
+                        scrollbar_mode: "off"
+                        scrollable: false
+                        widgets:
+                          - bar:
+                              id: pm25_bar
+                              width: 306
+                              height: 32
+                              align: CENTER
+                              min_value: 0
+                              max_value: 50
+                              value: 0
+                              bg_opa: TRANSP
+                              border_width: 0
+                              radius: 5
+                              indicator:
+                                bg_color: 0x2E7D32
+                                bg_opa: 70%
+                                radius: 5
+                          - label:
+                              text: "PM 2.5"
+                              text_font: MONTSERRAT_12
+                              text_color: 0xB0B0B0
+                              bg_opa: TRANSP
+                              align: LEFT_MID
+                              x: 10
+                          - label:
+                              id: pm25_value_label
+                              text: "-- ug/m3"
+                              text_font: MONTSERRAT_14
+                              text_color: 0xFFFFFF
+                              bg_opa: TRANSP
+                              align: CENTER
+                              x: 0
+                    # PM 4.0 row
+                    - obj:
+                        width: 310
+                        height: 36
+                        bg_color: 0x1A1A1A
+                        bg_opa: COVER
+                        border_width: 1
+                        border_color: 0x333333
+                        radius: 6
+                        scrollbar_mode: "off"
+                        scrollable: false
+                        widgets:
+                          - bar:
+                              id: pm4_bar
+                              width: 306
+                              height: 32
+                              align: CENTER
+                              min_value: 0
+                              max_value: 50
+                              value: 0
+                              bg_opa: TRANSP
+                              border_width: 0
+                              radius: 5
+                              indicator:
+                                bg_color: 0x2E7D32
+                                bg_opa: 70%
+                                radius: 5
+                          - label:
+                              text: "PM 4.0"
+                              text_font: MONTSERRAT_12
+                              text_color: 0xB0B0B0
+                              bg_opa: TRANSP
+                              align: LEFT_MID
+                              x: 10
+                          - label:
+                              id: pm4_value_label
+                              text: "-- ug/m3"
+                              text_font: MONTSERRAT_14
+                              text_color: 0xFFFFFF
+                              bg_opa: TRANSP
+                              align: CENTER
+                              x: 0
+                    # PM 10 row
+                    - obj:
+                        width: 310
+                        height: 36
+                        bg_color: 0x1A1A1A
+                        bg_opa: COVER
+                        border_width: 1
+                        border_color: 0x333333
+                        radius: 6
+                        scrollbar_mode: "off"
+                        scrollable: false
+                        widgets:
+                          - bar:
+                              id: pm10_bar
+                              width: 306
+                              height: 32
+                              align: CENTER
+                              min_value: 0
+                              max_value: 50
+                              value: 0
+                              bg_opa: TRANSP
+                              border_width: 0
+                              radius: 5
+                              indicator:
+                                bg_color: 0x2E7D32
+                                bg_opa: 70%
+                                radius: 5
+                          - label:
+                              text: "PM 10"
+                              text_font: MONTSERRAT_12
+                              text_color: 0xB0B0B0
+                              bg_opa: TRANSP
+                              align: LEFT_MID
+                              x: 10
+                          - label:
+                              id: pm10_value_label
+                              text: "-- ug/m3"
+                              text_font: MONTSERRAT_14
+                              text_color: 0xFFFFFF
+                              bg_opa: TRANSP
+                              align: CENTER
+                              x: 0
+                    # Particle size
+                    - label:
+                        id: particle_size_label
+                        text: "Avg. Particle Size: --"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x666666
+                        bg_opa: TRANSP
+                        align: CENTER
+
+              # Page dots (dot 2 active)
+              - obj:
+                  align: TOP_LEFT
+                  x: 131
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 147
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 163
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 179
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+
+    # ===================== PAGE 3: HOME & WEATHER =====================
+    - id: page_home_weather
+      widgets:
+        - obj:
+            styles: style_page
+            scrollable: false
+            widgets:
+              # Header
+              - image:
+                  src: icon_indoor
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  image_recolor: 0x3498DB
+                  image_recolor_opa: 100%
+              - label:
+                  text: "HOME & WEATHER"
+                  text_font: MONTSERRAT_14
+                  text_color: 0xB0B0B0
+                  bg_opa: TRANSP
+                  align: TOP_LEFT
+                  x: 34
+                  y: 5
+              - obj:
+                  align: TOP_LEFT
+                  x: 0
+                  y: 26
+                  width: 320
+                  height: 1
+                  bg_color: 0x333333
+                  bg_opa: COVER
+                  border_width: 0
+
+              # --- Indoor Temp Card ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 4
+                  y: 32
+                  width: 152
+                  height: 100
+                  widgets:
+                    - image:
+                        src: icon_indoor
+                        align: TOP_MID
+                        y: 4
+                        image_recolor: 0x3498DB
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "INDOOR"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_MID
+                        y: 28
+                    - label:
+                        id: indoor_temp_label
+                        text: "--"
+                        text_font: MONTSERRAT_28
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: CENTER
+                        y: 12
+
+              # --- Outdoor Temp Card ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 164
+                  y: 32
+                  width: 152
+                  height: 100
+                  widgets:
+                    - image:
+                        src: icon_outdoor
+                        align: TOP_MID
+                        y: 4
+                        image_recolor: 0xFF6600
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "OUTDOOR"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_MID
+                        y: 28
+                    - label:
+                        id: outdoor_temp_label
+                        text: "--"
+                        text_font: MONTSERRAT_28
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: CENTER
+                        y: 12
+
+              # --- Weather Card ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 4
+                  y: 140
+                  width: 312
+                  height: 56
+                  layout:
+                    type: flex
+                    flex_flow: ROW
+                    flex_align_main: CENTER
+                    flex_align_cross: CENTER
+                    pad_column: 8
+                  widgets:
+                    - image:
+                        id: weather_icon
+                        src: icon_w_sunny
+                        image_recolor: 0xF0E000
+                        image_recolor_opa: 100%
+                    - label:
+                        id: weather_text_label
+                        text: "--"
+                        text_font: MONTSERRAT_16
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+
+              # Page dots (dot 3 active)
+              - obj:
+                  align: TOP_LEFT
+                  x: 131
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 147
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 163
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 179
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+
+    # ===================== PAGE 4: LOCAL SENSORS =====================
+    - id: page_local_sensors
+      widgets:
+        - obj:
+            styles: style_page
+            scrollable: false
+            widgets:
+              # Header
+              - image:
+                  src: icon_indoor
+                  align: TOP_LEFT
+                  x: 8
+                  y: 4
+                  image_recolor: 0x3498DB
+                  image_recolor_opa: 100%
+              - label:
+                  text: "LOCAL SENSORS"
+                  text_font: MONTSERRAT_14
+                  text_color: 0xB0B0B0
+                  bg_opa: TRANSP
+                  align: TOP_LEFT
+                  x: 32
+                  y: 5
+              - obj:
+                  align: TOP_LEFT
+                  x: 0
+                  y: 26
+                  width: 320
+                  height: 1
+                  bg_color: 0x333333
+                  bg_opa: COVER
+                  border_width: 0
+
+              # --- Temp Card (Left Top) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 4
+                  y: 30
+                  width: 154
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_indoor
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0xFF3000
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "TEMPERATURE"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 30
+                        y: 7
+                    - label:
+                        id: local_temp_label
+                        text: "--°F"
+                        text_font: MONTSERRAT_24
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: BOTTOM_LEFT
+                        x: 8
+                        y: -8
+
+              # --- Humid Card (Right Top) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 162
+                  y: 30
+                  width: 154
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_humid
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0x3498DB
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "HUMIDITY"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 30
+                        y: 7
+                    - label:
+                        id: local_humid_label
+                        text: "--%"
+                        text_font: MONTSERRAT_24
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: BOTTOM_LEFT
+                        x: 8
+                        y: -8
+
+              # --- Lux Card (Left Bottom) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 4
+                  y: 118
+                  width: 154
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_lux
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0xF0E000
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "AMBIENT LIGHT"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 30
+                        y: 7
+                    - label:
+                        id: local_lux_label
+                        text: "-- lx"
+                        text_font: MONTSERRAT_24
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: BOTTOM_LEFT
+                        x: 8
+                        y: -8
+
+              # --- Distance Card (Right Bottom) ---
+              - obj:
+                  styles: style_card
+                  align: TOP_LEFT
+                  x: 162
+                  y: 118
+                  width: 154
+                  height: 82
+                  widgets:
+                    - image:
+                        src: icon_radar
+                        align: TOP_LEFT
+                        x: 2
+                        y: 2
+                        image_recolor: 0x909090
+                        image_recolor_opa: 100%
+                    - label:
+                        text: "STILL DISTANCE"
+                        text_font: MONTSERRAT_12
+                        text_color: 0x808080
+                        bg_opa: TRANSP
+                        align: TOP_LEFT
+                        x: 30
+                        y: 7
+                    - label:
+                        id: local_dist_label
+                        text: "-- ft"
+                        text_font: MONTSERRAT_24
+                        text_color: 0xFFFFFF
+                        bg_opa: TRANSP
+                        align: BOTTOM_LEFT
+                        x: 8
+                        y: -8
+
+              # Page dots (dot 4 active)
+              - obj:
+                  align: TOP_LEFT
+                  x: 131
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 147
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 163
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0x404040
+                  bg_opa: COVER
+                  border_width: 0
+              - obj:
+                  align: TOP_LEFT
+                  x: 179
+                  y: 224
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                  border_width: 0
+
+# =============================================================================
+# SENSORS
+# =============================================================================
+sensor:
+  - platform: ld2412
+    moving_distance:
+      name : Moving Distance
+    still_distance:
+      id: radar_still_distance
+      name: Still Distance
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: local_dist_label
+              text:
+                format: "%.1f ft"
+                args: ['x * 0.0328084']
+                if_nan: "-- ft"
+    moving_energy:
+      name: Move Energy
+    still_energy:
+      name: Still Energy
+    detection_distance:
+      name: Detection Distance
+    light:
+      name: Light
+
+
+  # --- Local: VEML7700 & SHT41 ---
+  - platform: veml7700
+    ambient_light:
+      id: local_lux
+      name: "Ambient Light"
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: local_lux_label
+              text:
+                format: "%.0f lx"
+                args: ['x']
+                if_nan: "-- lx"
+    update_interval: ${refresh_interval}s
+
+  - platform: sht4x
+    temperature:
+      id: sht_temp
+      name: "SHT41 Temperature"
+      filters:
+        - multiply: 0.738  # This applies a 
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: local_temp_label
+              text:
+                format: "%.1f°F"
+                args: ['x * 1.8 + 32.0']
+                if_nan: "--°F"
+    humidity:
+      id: sht_humid
+      name: "SHT41 Humidity"
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: local_humid_label
+              text:
+                format: "%.0f%%"
+                args: ['x']
+                if_nan: "--%%"
+    update_interval: ${refresh_interval}s
+
+  # --- Local: SPS30 Particulate Matter ---
+  - platform: sps30
+    pm_1_0:
+      name: "PM <1um Weight concentration"
+      id: local_PM_1_0
+      on_value:
+        then:
+          - lvgl.bar.update:
+              id: pm1_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(50.0f, x);
+          - lvgl.label.update:
+              id: pm1_value_label
+              text:
+                format: "%.1f ug/m3"
+                args: ['x']
+                if_nan: "-- ug/m3"
+    pm_2_5:
+      name: "PM <2.5um Weight concentration"
+      id: local_PM_2_5
+      on_value:
+        then:
+          # Update Page 2 bar
+          - lvgl.bar.update:
+              id: pm25_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(50.0f, x);
+          - lvgl.label.update:
+              id: pm25_value_label
+              text:
+                format: "%.1f ug/m3"
+                args: ['x']
+                if_nan: "-- ug/m3"
+          # Update Page 1 PM2.5 reference
+          - lvgl.label.update:
+              id: pm25_ref_label
+              text:
+                format: "PM2.5: %.1f ug/m3"
+                args: ['x']
+                if_nan: "PM2.5: --"
+          # Calculate AQI from PM2.5
+          - lambda: |-
+              if (isnan(x)) {
+                id(current_aqi) = -1;
+                lv_label_set_text(id(aqi_value_label), "--");
+                lv_label_set_text(id(aqi_quality_label), "");
+                lv_label_set_text(id(status_aqi_value), "AQI: --");
+                lv_obj_set_style_bg_color(id(aqi_badge_bg), lv_color_hex(0x404040), LV_PART_MAIN);
+                return;
+              }
+              float c = x;
+              int aqi;
+              uint32_t color;
+              const char* quality;
+              if (c <= 12.0f) {
+                aqi = (int)((50.0f/12.0f) * c);
+                color = 0x00E000; quality = "Good";
+              } else if (c <= 35.4f) {
+                aqi = (int)(50.0f + (49.0f/23.4f) * (c - 12.1f));
+                color = 0xF0E000; quality = "Moderate";
+              } else if (c <= 55.4f) {
+                aqi = (int)(101.0f + (49.0f/19.9f) * (c - 35.5f));
+                color = 0xFF6600; quality = "Sensitive";
+              } else if (c <= 150.4f) {
+                aqi = (int)(151.0f + (49.0f/94.9f) * (c - 55.5f));
+                color = 0xFF0000; quality = "Unhealthy";
+              } else if (c <= 250.4f) {
+                aqi = (int)(201.0f + (99.0f/99.9f) * (c - 150.5f));
+                color = 0x8B00FF; quality = "Very Bad";
+              } else {
+                aqi = (int)(301.0f + (199.0f/249.9f) * (c - 250.5f));
+                color = 0x800000; quality = "Hazardous";
+              }
+              if (aqi > 500) aqi = 500;
+              id(current_aqi) = aqi;
+              id(ha_exposed_aqi).publish_state(aqi);
+              // Update AQI badge
+              lv_label_set_text_fmt(id(aqi_value_label), "%d", aqi);
+              lv_label_set_text(id(aqi_quality_label), quality);
+              lv_obj_set_style_bg_color(id(aqi_badge_bg), lv_color_hex(color), LV_PART_MAIN);
+              lv_obj_set_style_text_color(id(aqi_quality_label), lv_color_hex(color), LV_PART_MAIN);
+              // Update status bar AQI
+              lv_label_set_text_fmt(id(status_aqi_value), "AQI: %d", aqi);
+    pm_4_0:
+      name: "PM <4um Weight concentration"
+      id: local_PM_4_0
+      on_value:
+        then:
+          - lvgl.bar.update:
+              id: pm4_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(50.0f, x);
+          - lvgl.label.update:
+              id: pm4_value_label
+              text:
+                format: "%.1f ug/m3"
+                args: ['x']
+                if_nan: "-- ug/m3"
+    pm_10_0:
+      name: "PM <10um Weight concentration"
+      id: local_PM_10_0
+      on_value:
+        then:
+          - lvgl.bar.update:
+              id: pm10_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(50.0f, x);
+          - lvgl.label.update:
+              id: pm10_value_label
+              text:
+                format: "%.1f ug/m3"
+                args: ['x']
+                if_nan: "-- ug/m3"
+    pm_size:
+      name: "Typical Particle size"
+      id: pm_size
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: particle_size_label
+              text:
+                format: "Avg. Particle Size: %.2f um"
+                args: ['x']
+                if_nan: "Avg. Particle Size: --"
+    address: 0x69
+    update_interval: ${refresh_interval}s
+
+  # --- Local: SGP4x VOC & NOx ---
+  - platform: sgp4x
+    compensation:
+      humidity_source: sht_humid
+      temperature_source: sht_temp
+    voc:
+      name: "VOC Index"
+      id: local_voc
+      on_value:
+        then:
+          - lvgl.bar.update:
+              id: voc_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(500.0f, x);
+          - lvgl.label.update:
+              id: voc_value_label
+              text:
+                format: "%.0f"
+                args: ['x']
+                if_nan: "--"
+    nox:
+      name: "NOx Index"
+      id: local_nox
+      on_value:
+        then:
+          - lvgl.bar.update:
+              id: nox_bar
+              value: !lambda |-
+                return isnan(x) ? 0 : (int)std::min(500.0f, x);
+          - lvgl.label.update:
+              id: nox_value_label
+              text:
+                format: "%.0f"
+                args: ['x']
+                if_nan: "--"
+    update_interval: ${refresh_interval}s
+
+  # --- HA Imports ---
+  - platform: homeassistant
+    entity_id: sensor.outdoor_temp_and_humidity_sensor_temperature
+    id: ha_outdoor_temp
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: outdoor_temp_label
+            text:
+              format: "%.1f°F"
+              args: ['x']
+              if_nan: "--"
+
+  - platform: homeassistant
+    entity_id: sensor.living_room_thermostat_current_temperature
+    id: ha_indoor_temp
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: indoor_temp_label
+            text:
+              format: "%.1f\u00b0F"
+              args: ['x']
+              if_nan: "--"
+        # Update status bar indoor temp (top-right, all pages)
+        - lvgl.label.update:
+            id: status_indoor_temp
+            text:
+              format: "%.0f\u00b0F"
+              args: ['x']
+              if_nan: "--"
+
+  # --- WiFi Signal Strength ---
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    entity_category: "diagnostic"
+    id: wifi_rssi
+    update_interval: ${refresh_interval}s
+    on_value:
+      then:
+        - lambda: |-
+            lv_obj_t *icon = id(status_wifi_icon);
+            uint32_t color;
+            if (x > -50) {
+              color = 0x00E000;  // Strong - green
+            } else if (x > -70) {
+              color = 0xF0E000;  // Good - yellow
+            } else if (x > -80) {
+              color = 0xFF6600;  // Weak - orange
+            } else {
+              color = 0xFF0000;  // Very weak - red
+            }
+            lv_obj_set_style_img_recolor(icon, lv_color_hex(color), LV_PART_MAIN);
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_rssi
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+    device_class: ""
+
+  # --- Template Sensor for HA ---
+  - platform: template
+    name: "Calculated AQI"
+    id: ha_exposed_aqi
+    icon: mdi:air-filter
+    unit_of_measurement: "AQI"
+    accuracy_decimals: 0
+    state_class: measurement
+
+
+  - platform: uptime
+    type: seconds
+    name: ESP Uptime
+    update_interval: ${refresh_interval}s
+
+
+
+
+text_sensor:
+
+  - platform: ld2412
+    version:
+      name: "LD2412 firmware version"
+    mac_address:
+      name: "LD2412 mac address"
+
+  - platform: homeassistant
+    entity_id: sensor.openweathermap_condition
+    id: ha_weather_desc
+    on_value:
+      then:
+        # Update weather text (capitalize first letter)
+        - lvgl.label.update:
+            id: weather_text_label
+            text: !lambda |-
+              if (x.empty()) return std::string("--");
+              // Simple condition text cleanup
+              std::string s = x;
+              for (auto &c : s) { if (c == '-') c = ' '; }
+              if (!s.empty()) s[0] = toupper(s[0]);
+              return s;
+        # Update weather icon based on condition
+        - lambda: |-
+            lv_obj_t *img = id(weather_icon);
+            if (x == "sunny") {
+              lv_img_set_src(img, id(icon_w_sunny));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xF0E000), LV_PART_MAIN);
+            } else if (x == "clear-night") {
+              lv_img_set_src(img, id(icon_w_night));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
+            } else if (x == "cloudy") {
+              lv_img_set_src(img, id(icon_w_cloudy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0x909090), LV_PART_MAIN);
+            } else if (x == "partlycloudy") {
+              lv_img_set_src(img, id(icon_w_partly_cloudy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xF0E000), LV_PART_MAIN);
+            } else if (x == "rainy") {
+              lv_img_set_src(img, id(icon_w_rainy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0x3498DB), LV_PART_MAIN);
+            } else if (x == "pouring") {
+              lv_img_set_src(img, id(icon_w_pouring));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0x3498DB), LV_PART_MAIN);
+            } else if (x == "snowy") {
+              lv_img_set_src(img, id(icon_w_snowy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+            } else if (x == "snowy-rainy") {
+              lv_img_set_src(img, id(icon_w_snowy_rainy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xB0B0FF), LV_PART_MAIN);
+            } else if (x == "fog") {
+              lv_img_set_src(img, id(icon_w_fog));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0x909090), LV_PART_MAIN);
+            } else if (x == "windy" || x == "windy-variant") {
+              lv_img_set_src(img, id(icon_w_windy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xB0B0B0), LV_PART_MAIN);
+            } else if (x == "lightning") {
+              lv_img_set_src(img, id(icon_w_lightning));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xF0E000), LV_PART_MAIN);
+            } else if (x == "lightning-rainy") {
+              lv_img_set_src(img, id(icon_w_lightning_rainy));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xF0E000), LV_PART_MAIN);
+            } else if (x == "hail") {
+              lv_img_set_src(img, id(icon_w_hail));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xB0B0FF), LV_PART_MAIN);
+            } else if (x == "exceptional") {
+              lv_img_set_src(img, id(icon_w_exceptional));
+              lv_obj_set_style_img_recolor(img, lv_color_hex(0xFF3000), LV_PART_MAIN);
+            }
+
+# =============================================================================
+# SCRIPTS
+# =============================================================================
+script:
+  - id: auto_scroll_loop
+    mode: restart
+    then:
+      - delay: ${auto_scroll_start_delay}s
+      - while:
+          condition:
+            binary_sensor.is_on: radar_presence
+          then:
+            - lvgl.page.next:
+                animation: OUT_LEFT
+                time: 300ms
+            - delay: ${auto_scroll_interval}s
+  - id: page_next_script
+    then:
+      - lvgl.page.next:
+          animation: OUT_LEFT
+          time: 300ms
+  - id: page_prev_script
+    then:
+      - lvgl.page.previous:
+          animation: OUT_RIGHT
+          time: 300ms
+  - id: refresh_all_widgets
+    then:
+      - lambda: |-
+          // Refresh all LVGL widgets from current sensor states after boot
+          float pm25 = id(local_PM_2_5).state;
+          float pm1 = id(local_PM_1_0).state;
+          float pm4 = id(local_PM_4_0).state;
+          float pm10 = id(local_PM_10_0).state;
+          float voc = id(local_voc).state;
+          float nox = id(local_nox).state;
+          float psize = id(pm_size).state;
+          float indoor = id(ha_indoor_temp).state;
+          float outdoor = id(ha_outdoor_temp).state;
+          float local_t = id(sht_temp).state;
+          float local_h = id(sht_humid).state;
+          float lux = id(local_lux).state;
+          float radar_still = id(radar_still_distance).state;
+          float aqi = id(ha_exposed_aqi).state;
+
+          // Force on_value callbacks by re-publishing current states
+          if (!isnan(pm1)) id(local_PM_1_0).publish_state(pm1);
+          if (!isnan(pm25)) id(local_PM_2_5).publish_state(pm25);
+          if (!isnan(pm4)) id(local_PM_4_0).publish_state(pm4);
+          if (!isnan(pm10)) id(local_PM_10_0).publish_state(pm10);
+          if (!isnan(voc)) id(local_voc).publish_state(voc);
+          if (!isnan(nox)) id(local_nox).publish_state(nox);
+          if (!isnan(psize)) id(pm_size).publish_state(psize);
+          if (!isnan(indoor)) id(ha_indoor_temp).publish_state(indoor);
+          if (!isnan(outdoor)) id(ha_outdoor_temp).publish_state(outdoor);
+          if (!isnan(local_t)) id(sht_temp).publish_state(local_t);
+          if (!isnan(local_h)) id(sht_humid).publish_state(local_h);
+          if (!isnan(lux)) id(local_lux).publish_state(lux);
+          if (!isnan(radar_still)) id(radar_still_distance).publish_state(radar_still);
+          if (!isnan(aqi)) id(ha_exposed_aqi).publish_state(aqi);
+
+          // Refresh weather text
+          std::string weather = id(ha_weather_desc).state;
+          if (!weather.empty()) id(ha_weather_desc).publish_state(weather);
+
+
+number:
+  - platform: ld2412
+    timeout:
+      name: timeout
+    min_distance_gate:
+      name: min distance gate
+    max_distance_gate:
+      name: max distance gate
+
+button:
+  - platform: ld2412
+    restart:
+      name: "LD2412 restart"
+      id: ld2412_restart_btn
+    query_params:
+      name: query params
+  - platform: restart
+    name: "ESP32 Restart Device"
+
+switch:
+  - platform: ld2412
+    # bluetooth:
+      # name: "Bluetooth"
+    engineering_mode:
+      name: Engineering Mode
+ 
+
