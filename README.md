@@ -48,21 +48,24 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 
 ## 🔧 Hardware
 
+### 3D Printed Enclosure
+
+The project features a sleek, desktop-friendly housing designed to fit perfectly. 
+👉 **[View the 3D Models and Source Files](3d%20printed%20enclosure/README.md)**
+
 ### Bill of Materials
 
-| Component | Description | Qty | Approx. Cost |
-|---|---|---|---|
-| Seeed XIAO ESP32-S3 | MCU with PSRAM, WiFi | 1 | $8 |
-| ILI9341 2.8" TFT | 320×240 LCD with XPT2046 touch | 1 | $10 |
-| Sensirion SPS30 | Laser particulate matter sensor | 1 | $35 |
-| Sensirion SGP41 | VOC + NOx gas sensor | 1 | $10 |
-| Sensirion SHT41 | Temperature + humidity sensor | 1 | $6 |
-| VEML7700 | Ambient light sensor | 1 | $5 |
-| HLK-LD2412 | 24GHz mmWave radar | 1 | $5 |
-| Gikfun Protoboard | 17×10 solderable mini breadboard | 1 | $2 |
-| Dupont wires / headers | Hookup wire | — | $3 |
-
-**Total estimated cost: ~$84**
+| Component | Description | Qty |
+|---|---|---|
+| Seeed XIAO ESP32-S3 | MCU with PSRAM, WiFi | 1 |
+| ILI9341 2.8" TFT | 320×240 LCD with XPT2046 touch | 1 |
+| Sensirion SPS30 | Laser particulate matter sensor | 1 |
+| Sensirion SGP41 | VOC + NOx gas sensor | 1 |
+| Sensirion SHT41 | Temperature + humidity sensor | 1 |
+| VEML7700 | Ambient light sensor | 1 |
+| HLK-LD2412 | 24GHz mmWave radar | 1 |
+| Gikfun Protoboard | 17×10 solderable mini breadboard | 1 |
+| Dupont wires / headers | Hookup wire | — |
 
 ### Pin Mapping (XIAO ESP32-S3)
 
