@@ -17,6 +17,6 @@ To ensure you are getting the most up-to-date versions of the enclosure, the STL
 
 - **Material:** PETG or PLA is fine, but PETG is recommended if the unit will sit in direct sunlight.
 - **Resolution:** 0.20mm layer height works great.
-- **Supports:** Required for the sensor cutouts and the USB port opening.
+- **Supports:** Required - as i recommend priting in the orientation that provides the best surface finish.
 
-*Feel free to open an issue or pull request if you make a cool modification to the enclosure!*
+

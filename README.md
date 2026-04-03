@@ -135,6 +135,10 @@ A feature-rich indoor air quality monitor built with **ESPHome**, **LVGL**, and 
 
 Uses a **17×10 Gikfun solderable mini breadboard** (columns A-E connected left, F-J connected right).
 
+<p align="center">
+  <img src="images/GikfunPerfboard.jpg" width="40%" alt="Gikfun Perfboard Reference">
+</p>
+
 ### Allocation Map
 
 | Row | Left (A-E) | Right (F-J) |
@@ -226,30 +230,9 @@ These entities must exist in your Home Assistant for Page 3 to display data:
 
 ### Installation
 
-1. **Clone this repository:**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/air-quality-station.git
-   ```
-
-2. **Create your `secrets.yaml`** (in your ESPHome config directory):
-   ```yaml
-   wifi_ssid: "YourWiFiSSID"
-   wifi_password: "YourWiFiPassword"
-   fallback_password: "YourFallbackPassword"
-   ```
-
-3. **Update API/OTA credentials** in `aqistation.yaml`:
-   - Replace the `api.encryption.key` with your own (generate with `esphome generate-key`)
-   - Replace the `ota.password` with your own
-
-4. **Update Home Assistant entity IDs** in the `homeassistant` sensor section to match your own entities (or remove them if you don't need Page 3 weather data).
-
-5. **Flash to your ESP32-S3:**
-   ```bash
-   esphome run aqistation.yaml
-   ```
-
-6. **Add to Home Assistant** — the device will appear automatically via the ESPHome integration.
+1. **Download Configuration:** Download the `aqistation.yaml` file from this repository.
+2. **Update Credentials:** Update the key information at the top of the file including your WiFi SSID/password, fallback hotspot password, and device names.
+3. **Install:** Flash the firmware to your ESP32-S3 using the standard ESPHome dashboard or CLI.
 
 ### First Boot
 
@@ -275,6 +258,10 @@ These values at the top of `aqistation.yaml` can be easily customized:
 | `refresh_interval` | `05` | Sensor update interval in seconds |
 | `auto_scroll_start_delay` | `30` | Seconds before auto-scroll begins |
 | `auto_scroll_interval` | `15` | Seconds between auto-scroll page changes |
+
+### Home Assistant Entities
+
+Don't forget to update the `entity_id` values in the `homeassistant` sensor platform block of the YAML file to match your actual Home Assistant indoor/outdoor temperature and weather entities. See [Entities Imported from HA](#entities-imported-from-ha) for more details.
 
 ### Temperature Units
 
@@ -305,37 +292,6 @@ AQI is calculated using the **US EPA breakpoint table** from PM2.5 concentration
 
 ---
 
-## 📁 Project Structure
-
-```
-air-quality-station/
-├── 3d printed enclosure/    # 3D models and enclosure files
-├── aqistation.yaml          # Main ESPHome configuration
-├── README.md                # This file
-├── implementation_plan.md   # Protoboard wiring plan
-├── requirements.md          # Design requirements & specifications
-├── screen_designs.md        # LVGL page/widget mapping reference
-├── device_analysis.md       # Hardware analysis & architecture notes
-└── images/                  # Screenshot reference images
-    ├── page1_air_quality.png
-    ├── page2_particulates.png
-    └── page3_home_weather.png
-```
-
----
-
-## 🛡️ Reliability Features
-
-- **`reboot_timeout: 0s`** — device continues running locally even if Home Assistant disconnects
-- **NaN-safe display** — all sensor values display `--` when unavailable
-- **Boot-time widget refresh** — display populated from current sensor states after reconnect
-- **Fallback AP** — if WiFi fails, device creates a hotspot for reconfiguration
-- **Captive portal** — web-based WiFi config when in AP mode
-- **PSRAM enabled** — octal PSRAM at 80MHz for LVGL frame buffers
-- **Safe mode** — ESPHome default safe mode allows OTA recovery if firmware fails
-
----
-
 ## 📝 License
 
 This project is available under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](LICENSE). You may not use the material for commercial purposes without explicit permission from the author.
@@ -348,9 +304,3 @@ This project is available under the [Creative Commons Attribution-NonCommercial-
 - [LVGL](https://lvgl.io/) — graphics library
 - [Sensirion](https://sensirion.com/) — sensor manufacturer (SPS30, SGP4x, SHT4x)
 - [Home Assistant](https://www.home-assistant.io/) — smart home platform
-
----
-
-## 📬 Contributing
-
-Contributions are welcome! Please open an issue or pull request if you have improvements, bug fixes, or feature requests.
