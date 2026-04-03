@@ -6,7 +6,7 @@ The custom 3D printed enclosure for the Air Quality Station provides a sleek, de
 
 To ensure you are getting the most up-to-date versions of the enclosure, the STL files and the complete Fusion 360 source file (`.f3d`) have been uploaded to **MakerWorld**.
 
-👉 **[Download the 3D Models on MakerWorld](#)** *(Link coming soon)*
+👉 **[Download the 3D Models on MakerWorld](https://makerworld.com/en/models/2609921-smart-air-quality-station-dashboard-enclosure#profileId-2880298)**
 
 ### What's included on MakerWorld:
 - **STL Files:** Ready-to-print parts for the front bezel and rear housing.
